@@ -17,6 +17,7 @@ import org.ethereum.listener.EthereumListenerAdapter;
 import org.ethereum.mine.Ethash;
 import org.ethereum.solidity.compiler.CompilationResult;
 import org.ethereum.solidity.compiler.SolidityCompiler;
+import org.ethereum.solidity.compiler.CompilationResult.ContractMetadata;
 import org.ethereum.sync.SyncManager;
 import org.ethereum.util.ByteUtil;
 import org.ethereum.validator.DependentBlockHeaderRuleAdapter;
@@ -292,14 +293,7 @@ public class StandaloneBlockchain implements LocalBlockchain {
     @Override
     public SolidityContract submitNewContract(String soliditySrc, String contractName, Object... constructorArgs) {
         SolidityContractImpl contract = createContract(soliditySrc, contractName);
-        CallTransaction.Function constructor = contract.contract.getConstructor();
-        if (constructor == null && constructorArgs.length > 0) {
-            throw new RuntimeException("No constructor with params found");
-        }
-        byte[] argsEncoded = constructor == null ? new byte[0] : constructor.encodeArguments(constructorArgs);
-        submitNewTx(new PendingTx(new byte[0], BigInteger.ZERO,
-                ByteUtil.merge(Hex.decode(contract.getBinary()), argsEncoded), contract, null, new TransactionResult()));
-        return contract;
+        return submitContractFromMetaData(contract, constructorArgs);
     }
 
     @Override
@@ -307,24 +301,39 @@ public class StandaloneBlockchain implements LocalBlockchain {
         return submitNewContractFromJson(json, null, constructorArgs);
     }
 
+    //@Override
+    public SolidityContract submitNewContractFromJson(ContractMetadata metadata, Object... constructorArgs) {
+    	SolidityContractImpl contract = new SolidityContractImpl(metadata);    	
+    	return submitContractFromMetaData(contract, constructorArgs);
+    }
+
     @Override
     public SolidityContract submitNewContractFromJson(String json, String contractName, Object... constructorArgs) {
 		SolidityContractImpl contract;
 		try {
 			contract = createContractFromJson(contractName, json);
-			CallTransaction.Function constructor = contract.contract.getConstructor();
-			if (constructor == null && constructorArgs.length > 0) {
-				throw new RuntimeException("No constructor with params found");
-			}
-			byte[] argsEncoded = constructor == null ? new byte[0] : constructor.encodeArguments(constructorArgs);
-			submitNewTx(new PendingTx(new byte[0], BigInteger.ZERO,
-					ByteUtil.merge(Hex.decode(contract.getBinary()), argsEncoded), contract, null,
-					new TransactionResult()));
-			return contract;
+			return submitContractFromMetaData(contract, constructorArgs);
 		} catch (IOException e) {
 			throw new RuntimeException(e);
 		}
     }
+
+	/**
+	 * @param contract
+	 * @param constructorArgs
+	 * @return
+	 */
+	public SolidityContract submitContractFromMetaData(SolidityContractImpl contract, Object... constructorArgs) {
+		CallTransaction.Function constructor = contract.contract.getConstructor();
+		if (constructor == null && constructorArgs.length > 0) {
+			throw new RuntimeException("No constructor with params found");
+		}
+		byte[] argsEncoded = constructor == null ? new byte[0] : constructor.encodeArguments(constructorArgs);
+		submitNewTx(new PendingTx(new byte[0], BigInteger.ZERO,
+				ByteUtil.merge(Hex.decode(contract.getBinary()), argsEncoded), contract, null,
+				new TransactionResult()));
+		return contract;
+	}
 
     private SolidityContractImpl createContract(String soliditySrc, String contractName) {
         try {
